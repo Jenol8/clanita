@@ -1,50 +1,71 @@
-# Learn more about Jenkins and JENKINS_HOME directory for which this file is
-# intended.
-#
-#  http://jenkins-ci.org/
-#  https://wiki.jenkins-ci.org/display/JENKINS/Administering+Jenkins
-#
-# Note: secret.key is purposefully not tracked by git. This should be backed up
-# separately because configs may contain secrets which were encrypted using the
-# secret.key.  To back up secrets use 'tar -czf /tmp/secrets.tgz secret*' and
-# save the file separate from your repository.  If you want secrets backed up
-# with configuration, then see the bottom of this file for an example.
+pipeline {
+    agent any
 
-# Ignore all JENKINS_HOME except jobs directory, root xml config, and
-# .gitignore file.
-/*
-!/jobs
-!/.gitignore
-!/*.xml
+    stages {
+        stage('Build') {
+            steps {
+                // Use Maven as the build automation tool
+                sh 'mvn clean package'
+            }
+        }
 
-# Ignore all files in jobs subdirectories except for folders.
-# Note: git doesn't track folders, only file content.
-jobs/**
-!jobs/**/
+        stage('Unit and Integration Tests') {
+            steps {
+                // Use JUnit for unit tests
+                sh 'mvn test'
+                
+                // Use a test automation tool like Selenium for integration tests
+                sh 'mvn integration-test'
+            }
+        }
 
-# Uncomment the following line to save next build numbers with config.
+        stage('Code Analysis') {
+            steps {
+                // Use a code analysis tool like SonarQube
+                // Ensure SonarQube is properly configured in Jenkins
+                withSonarQubeEnv('SonarQubeServer') {
+                    sh 'mvn sonar:sonar'
+                }
+            }
+        }
 
-#!jobs/**/nextBuildNumber
+        stage('Security Scan') {
+            steps {
+                // Use a security scanning tool like OWASP ZAP
+                // Ensure OWASP ZAP is properly installed and configured in Jenkins
+                sh 'zap-baseline.sh -t <target-url>'
+            }
+        }
 
-# For performance reasons, we want to ignore builds in Jenkins jobs because it
-# contains many tiny files on large installations.  This can impact git
-# performance when running even basic commands like 'git status'.
-builds
-indexing
+        stage('Deploy to Staging') {
+            steps {
+                // Use a deployment tool or script to deploy the application to a staging server
+                sh 'ansible-playbook -i inventory/staging deploy.yml'
+            }
+        }
 
-# Exclude only config.xml files in repository subdirectories.
-!config.xml
+        stage('Integration Tests on Staging') {
+            steps {
+                // Use test automation tools to run integration tests on the staging environment
+                sh 'mvn integration-test'
+            }
+        }
 
-# Don't track workspaces (when users build on the master).
-jobs/**/*workspace
+        stage('Deploy to Production') {
+            steps {
+                // Use a deployment tool or script to deploy the application to a production server
+                sh 'ansible-playbook -i inventory/production deploy.yml'
+            }
+        }
+    }
 
-# Security warning: If secrets are included with your configuration, then an
-# adversary will be able to decrypt all encrypted secrets within Jenkins
-# config.  Including secrets is a bad practice, but the example is included in
-# case someone still wants it for convenience.  Uncomment the following line to
-# include secrets for decryption with repository configuration in Git.
-
-#!/secret*
-
-# As a result, only Jenkins settings and job config.xml files in JENKINS_HOME
-# will be tracked by git.
+    post {
+        always {
+            // Send notification emails with status and logs
+            emailext body: '${SCRIPT, template="groovy-html.template"}',
+                subject: "Pipeline Status: ${currentBuild.result}",
+                to: "email@example.com",
+                mimeType: 'text/html'
+        }
+    }
+}
